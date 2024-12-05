@@ -107,8 +107,8 @@ def process_excel_file(file_path):
     for row in range(start_data_row, start_data_row + non_empty_rows):
         ws[f'{PRICE_HRN_COL}{row}'].value = _round(ws[f'{PRICE_HRN_COL}{row}'].value, 2)
         ws[f'{WEIGHT_PRICE_HRN_COL}{row}'].value = _round(ws[f'{WEIGHT_PRICE_HRN_COL}{row}'].value, 2)
-        ws[f'{ADJUST_SUM_HRN_COL}{row}'].value = _round(ws[f'{ADJUST_SUM_HRN_COL}{row}'].value, 2)
-        # ws[f'{ADJUST_SUM_HRN_COL}{row}'].value = ws[f'{ADJUST_SUM_HRN_COL}{row}'].value
+        # ws[f'{ADJUST_SUM_HRN_COL}{row}'].value = _round(ws[f'{ADJUST_SUM_HRN_COL}{row}'].value, 2)
+        ws[f'{ADJUST_SUM_HRN_COL}{row}'].value = ws[f'{ADJUST_SUM_HRN_COL}{row}'].value
         ws[f'{ADJUST_SUM_EUR_COL}{row}'].value = _round(ws[f'{ADJUST_SUM_EUR_COL}{row}'].value, 2)
 
     set_borders(ws, summary_row)
@@ -124,22 +124,22 @@ def process_excel_file(file_path):
 
 def adjust_hrn_values(ws, target_hrn_cell, column_hrn, non_empty_rows, euro_rate):
 
-    def sum_of_significant_digits(mantissa):
-        mantissa_str = f"{mantissa:.6f}"[2:]
-        return sum(int(digit) for digit in mantissa_str)
+    def sum_of_fractions(fractions):
+        fraction_str = f"{fractions:.6f}"[2:]
+        return sum(int(digit) for digit in fraction_str)
 
-    def sort_mantissas_by_digit_sum(mantissas, asc):
-        return sorted(mantissas, key=sum_of_significant_digits, reverse=not asc)
+    def sort_fractions_by_digit_sum(fractions, asc):
+        return sorted(fractions, key=sum_of_fractions, reverse=not asc)
 
     def fill_values_holder_list(lst, asc=True):
-        mantissas = [math.modf(value)[0] for value in lst]
-        sorted_mantissas = sort_mantissas_by_digit_sum(mantissas, asc)
+        fractions = [math.modf(value)[0] for value in lst]
+        sorted_fractions = sort_fractions_by_digit_sum(fractions, asc)
 
         holder = []
         for index, value in enumerate(lst):
-            current_mantissa = math.modf(value)[0]
-            mantissa_index = sorted_mantissas.index(current_mantissa)
-            holder.append(ValuesHolder(mantissa_index, index, value))
+            current_fraction = math.modf(value)[0]
+            fraction_index = sorted_fractions.index(current_fraction)
+            holder.append(ValuesHolder(fraction_index, index, value))
 
         return holder
 
@@ -147,9 +147,9 @@ def adjust_hrn_values(ws, target_hrn_cell, column_hrn, non_empty_rows, euro_rate
     target_sum_hrn = ws[target_hrn_cell].value
     current_sum_hrn = sum(values_hrn)
     diff_hrn = target_sum_hrn - current_sum_hrn
-    values_helper = ValuesHelper(fill_values_holder_list(values_hrn))
-    # mantissa_index = min(range(len(values_hrn)), key=lambda i: mantissa(values_hrn[i]))
-    # sorted_values_hrn = sorted(values_hrn, key=lambda val: mantissa(round(val, 5)))
+
+    values_helper = ValuesHelper(fill_values_holder_list(values_hrn, diff_hrn > 0))
+
 
     while abs(diff_hrn) > ACCURACY:
         current_value = values_helper.next()
@@ -161,7 +161,7 @@ def adjust_hrn_values(ws, target_hrn_cell, column_hrn, non_empty_rows, euro_rate
             new_value_eur = _round(new_value / euro_rate, 2)
             updated_sum_hrn = current_sum_hrn - current_value + new_value
 
-            if old_value_eur > new_value_eur or abs(updated_sum_hrn - target_sum_hrn) > abs(diff_hrn):
+            if abs(old_value_eur > new_value_eur) > 0 or abs(updated_sum_hrn - target_sum_hrn) > abs(diff_hrn):
                 break
 
             current_value = new_value
@@ -197,24 +197,24 @@ def set_borders(ws, summary_row):
         ws.cell(row=summary_row, column=col).border = ws.cell(row=summary_row, column=col).border + thick_border
 
 class ValuesHolder:
-    def __init__(self, mantissa_index, index, value):
-        self.mantissa_index = mantissa_index
+    def __init__(self, fraction_index, index, value):
+        self.fraction_index = fraction_index
         self.index = index
         self.value = value
 
 class ValuesHelper:
-    current_mnts = -1
+    current_fraction = -1
     def __init__(self, values):
         self.values = values
 
     def index(self):
         for item in self.values:
-            if item.mantissa_index == self.current_mnts:
+            if item.fraction_index == self.current_fraction:
                 return item.index
 
-    def get_by_mantissa_index(self, idx):
+    def get_by_fraction_index(self, idx):
         for item in self.values:
-            if item.mantissa_index == idx:
+            if item.fraction_index == idx:
                 return item
 
     def set_value_by_index(self, idx, value):
@@ -223,11 +223,11 @@ class ValuesHelper:
                 item.value = value
 
     def next(self):
-        if self.current_mnts == len(self.values) - 1:
-            self.current_mnts = 0
+        if self.current_fraction == len(self.values) - 1:
+            self.current_fraction = 0
         else:
-            self.current_mnts += 1
-        item = self.get_by_mantissa_index(self.current_mnts)
+            self.current_fraction += 1
+        item = self.get_by_fraction_index(self.current_fraction)
         return item.value
 
 def main():
