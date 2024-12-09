@@ -14,7 +14,7 @@ logging.basicConfig(
     ]
 )
 ACCURACY = 0.001
-COUNTER_ITERATIONS = 10000
+LIMIT = 10000
 MODEL_COL = 'B'
 PRICE_EUR_COL = 'C'
 PRICE_HRN_COL = 'D'
@@ -158,12 +158,15 @@ def adjust_hrn_values(ws, non_empty_rows, euro_rate):
 
     values_helper = ValuesHelper(fill_values_holder_list(values_hrn, diff_hrn > 0))
 
-    while abs(diff_hrn) > ACCURACY:
+    counter = 0
+    while abs(diff_hrn) > ACCURACY or LIMIT > counter:
         current_value = values_helper.next()
         increment = ACCURACY if diff_hrn > 0 else -ACCURACY
         current_value_eur = ws[f'{ADJUST_SUM_EUR_COL}{START_DATA_ROW + values_helper.index()}'].value
 
-        while True:
+        while LIMIT > counter:
+            counter += 1
+
             new_value = current_value + increment
             old_value_eur = _round(current_value / euro_rate, 2)
             new_value_eur = _round(new_value / euro_rate, 2)
