@@ -1,7 +1,7 @@
 import math
 import os
 import logging
-from decimal import Decimal, ROUND_HALF_UP
+# from decimal import Decimal, ROUND_HALF_UP
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Border, Side
 
@@ -13,6 +13,7 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
+DEBUG = False
 ACCURACY = 0.001
 LIMIT = 10000
 MODEL_COL = 'B'
@@ -36,8 +37,8 @@ YELLOW_FILL = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="s
 
 
 def _round(value, number):
-    value = round(value, 3)
-    return float(Decimal(str(value)).quantize(Decimal('1.' + '1' * number), rounding=ROUND_HALF_UP))
+    return round(round(round(value, 4), 3), 2)
+    # return float(Decimal(str(value)).quantize(Decimal('1.' + '1' * number), rounding=ROUND_HALF_UP))
 
 def count_non_empty_models(ws):
     count = 0
@@ -50,6 +51,9 @@ def count_non_empty_models(ws):
 
 
 def process_excel_file(file_path):
+    def equal():
+        return _round(sum_hrn, 2) == _round(target_sum_hrn, 2) and _round(sum_eur, 2) == _round(target_sum_eur, 2)
+
     # Load the Excel file with data_only=True to get cell values instead of formulas
     wb = load_workbook(file_path, data_only=True)
     ws = wb.active
@@ -58,7 +62,6 @@ def process_excel_file(file_path):
         # date = ws[date_cell].value
         euro_rate = ws[EURO_RATE_CELL].value
         target_sum_hrn = ws[ADJUST_SUM_HRN_CELL].value
-        ws[ADJUST_SUM_HRN_CELL].fill = PALE_GREEN_FILL
         non_empty_rows = count_non_empty_models(ws)
         target_sum_eur = target_sum_hrn / euro_rate
         sum_price_models_euro = sum(ws[f'{PRICE_EUR_COL}{row}'].value for row in range(START_DATA_ROW, START_DATA_ROW + non_empty_rows))
@@ -68,7 +71,6 @@ def process_excel_file(file_path):
         return
 
     ws[ADJUST_SUM_EUR_CELL].value = _round(target_sum_eur, 2)
-    ws[ADJUST_SUM_EUR_CELL].fill = PALE_BLUE_FILL
 
     if sum(ws[f'{PERCENT_HRN_COL}{row}'].value for row in range(START_DATA_ROW, START_DATA_ROW + non_empty_rows)) != 100:
         logging.error(f"Total weight percent in column '{PERCENT_HRN_COL}' of file {file_path} does not equal 100%.")
@@ -79,39 +81,39 @@ def process_excel_file(file_path):
         price_model_hrn = price_euro * euro_rate
         weight_percent = ws[f'{PERCENT_HRN_COL}{row}'].value
 
-        sum_by_percent = round(recalculated_diff_euro, 2) * euro_rate * weight_percent / 100
+        sum_by_percent = recalculated_diff_euro * euro_rate * weight_percent / 100
         ws[f'{PRICE_HRN_COL}{row}'] = price_model_hrn
         ws[f'{ADJUST_SUM_HRN_COL}{row}'] = ws[f'{PRICE_HRN_COL}{row}'].value + sum_by_percent
         ws[f'{ADJUST_SUM_EUR_COL}{row}'] = ws[f'{ADJUST_SUM_HRN_COL}{row}'].value / euro_rate
-        ws[f'{WEIGHT_PRICE_HRN_COL}{row}'] = abs(sum_by_percent)
+        ws[f'{WEIGHT_PRICE_HRN_COL}{row}'] = sum_by_percent
 
-    adjust_hrn_values(ws, non_empty_rows, euro_rate)
+    sum_hrn = sum(ws[f'{ADJUST_SUM_HRN_COL}{row}'].value for row in range(START_DATA_ROW, START_DATA_ROW + non_empty_rows))
+    sum_eur = sum(ws[f'{ADJUST_SUM_EUR_COL}{row}'].value for row in range(START_DATA_ROW, START_DATA_ROW + non_empty_rows))
 
-    sum_hrn = sum(_round(ws[f'{ADJUST_SUM_HRN_COL}{row}'].value, 2) for row in range(START_DATA_ROW, START_DATA_ROW + non_empty_rows))
-    sum_eur = sum(_round(ws[f'{ADJUST_SUM_EUR_COL}{row}'].value, 2) for row in range(START_DATA_ROW, START_DATA_ROW + non_empty_rows))
+    if not equal():
+        adjust_hrn_values(ws, non_empty_rows, euro_rate)
 
-    if _round(sum_hrn, 2) != _round(target_sum_hrn, 2) or _round(sum_eur, 2) != _round(target_sum_eur, 2):
+    if not equal():
         logging.error(
             f"Could not reach required accuracy for file: {file_path}. "
-            f"Expected summary sum HRN: {target_sum_hrn}, Calculated: {_round(sum_hrn, 2)}. "
-            f"Expected summary sum EUR: {target_sum_eur}, Calculated: {_round(sum_eur, 2)}."
+            f"Expected sum for HRN: {_round(target_sum_hrn, 2)}, Calculated: {_round(sum_hrn, 2)}. "
+            f"Expected sum for EUR: {_round(target_sum_eur, 2)}, Calculated: {_round(sum_eur, 2)}."
         )
 
     summary_row = START_DATA_ROW + non_empty_rows
     ws[f'{ADJUST_SUM_HRN_COL}{summary_row}'] = _round(sum_hrn, 2)
     ws[f'{ADJUST_SUM_EUR_COL}{summary_row}'] = _round(sum_eur, 2)
 
-    ws[f'{ADJUST_SUM_HRN_COL}{summary_row}'].fill = PALE_GREEN_FILL
-    ws[f'{ADJUST_SUM_EUR_COL}{summary_row}'].fill = PALE_BLUE_FILL
-
     for row in range(START_DATA_ROW, START_DATA_ROW + non_empty_rows):
         ws[f'{PRICE_HRN_COL}{row}'].value = _round(ws[f'{PRICE_HRN_COL}{row}'].value, 2)
         ws[f'{WEIGHT_PRICE_HRN_COL}{row}'].value = _round(ws[f'{WEIGHT_PRICE_HRN_COL}{row}'].value, 2)
         ws[f'{ADJUST_SUM_HRN_COL}{row}'].value = _round(ws[f'{ADJUST_SUM_HRN_COL}{row}'].value, 2)
-        # ws[f'{ADJUST_SUM_HRN_COL}{row}'].value = ws[f'{ADJUST_SUM_HRN_COL}{row}'].value
         ws[f'{ADJUST_SUM_EUR_COL}{row}'].value = _round(ws[f'{ADJUST_SUM_EUR_COL}{row}'].value, 2)
+        if DEBUG:
+            ws[f'{ADJUST_SUM_HRN_COL}{row}'].value = ws[f'{ADJUST_SUM_HRN_COL}{row}'].value
+            ws[f'{ADJUST_SUM_EUR_COL}{row}'].value = ws[f'{ADJUST_SUM_EUR_COL}{row}'].value
 
-    set_borders(ws, summary_row)
+    styling(ws, summary_row, non_empty_rows)
 
     try:
         wb.save(file_path)
@@ -124,26 +126,23 @@ def process_excel_file(file_path):
 
 def adjust_hrn_values(ws, non_empty_rows, euro_rate):
 
-    def sum_of_fractions(fractions):
-        fraction_str = f"{fractions:.6f}"[2:]
-        return sum(int(digit) for digit in fraction_str)
+    def fill_values_holder_list(lst_hrn, lst_eur, asc=True):
+        def sum_of_fractions(fractions):
+            fraction_str = f"{fractions:.6f}"[2:]
+            return sum(int(digit) for digit in fraction_str)
 
-    def sort_fractions_by_digit_sum(fractions, asc):
-        return sorted(fractions, key=sum_of_fractions, reverse=not asc)
-
-    def fill_values_holder_list(lst, asc=True):
-        fractions = [math.modf(value)[0] for value in lst]
-        sorted_fractions = sort_fractions_by_digit_sum(fractions, asc)
+        fractions = [math.modf(value)[0] for value in lst_eur]
+        sorted_fractions = sorted(fractions, key=sum_of_fractions, reverse=not asc)
 
         holder = []
-        for index, value in enumerate(lst):
-            current_fraction = math.modf(value)[0]
+        for index, value in enumerate(lst_hrn):
+            current_fraction = sorted_fractions[index] #math.modf(value)[0]
             fraction_index = sorted_fractions.index(current_fraction)
             holder.append(ValuesHolder(fraction_index, index, value))
 
         return holder
 
-    def calculate_values(col, cell, rounded=False):
+    def calculate_initial_values(col, cell, rounded=False):
         if rounded:
             values = [_round(ws[f'{col}{r}'].value, 2) for r in range(START_DATA_ROW, START_DATA_ROW + non_empty_rows)]
         else:
@@ -153,44 +152,46 @@ def adjust_hrn_values(ws, non_empty_rows, euro_rate):
         diff = target_sum - current_sum
         return values, target_sum, current_sum, diff
 
-    values_hrn, target_sum_hrn, current_sum_hrn, diff_hrn = calculate_values(ADJUST_SUM_HRN_COL, ADJUST_SUM_HRN_CELL)
-    values_eur, target_sum_eur, current_sum_eur, diff_eur = calculate_values(ADJUST_SUM_EUR_COL, ADJUST_SUM_EUR_CELL, True)
+    values_hrn, target_sum_hrn, current_sum_hrn, diff_hrn = calculate_initial_values(ADJUST_SUM_HRN_COL, ADJUST_SUM_HRN_CELL)
+    values_eur, target_sum_eur, current_sum_eur, diff_eur = calculate_initial_values(ADJUST_SUM_EUR_COL, ADJUST_SUM_EUR_CELL, True)
 
-    values_helper = ValuesHelper(fill_values_holder_list(values_hrn, diff_hrn > 0))
+    values_helper = ValuesHelper(fill_values_holder_list(values_hrn, values_eur, diff_hrn > 0))
 
-    counter = 0
-    while abs(diff_hrn) > ACCURACY or LIMIT > counter:
-        current_value = values_helper.next()
+    while abs(diff_hrn) > ACCURACY:
         increment = ACCURACY if diff_hrn > 0 else -ACCURACY
+        current_value_hrn = values_helper.next()
         current_value_eur = ws[f'{ADJUST_SUM_EUR_COL}{START_DATA_ROW + values_helper.index()}'].value
 
-        while LIMIT > counter:
-            counter += 1
-
-            new_value = current_value + increment
-            old_value_eur = _round(current_value / euro_rate, 2)
-            new_value_eur = _round(new_value / euro_rate, 2)
-            updated_sum_hrn = current_sum_hrn - current_value + new_value
+        while True:
+            new_value_hrn = current_value_hrn + increment
+            old_value_eur = _round(current_value_hrn / euro_rate, 2)
+            new_value_eur = _round(new_value_hrn / euro_rate, 2)
+            updated_sum_hrn = current_sum_hrn - current_value_hrn + new_value_hrn
             updated_sum_eur = current_sum_eur - old_value_eur + new_value_eur
 
-            if abs(old_value_eur > new_value_eur) == 0 and _round(abs(diff_eur), 2) == 0 and abs(updated_sum_hrn - target_sum_hrn) > abs(diff_hrn):
+            if abs(old_value_eur - new_value_eur) == 0 and _round(abs(diff_eur), 2) == 0 and abs(updated_sum_hrn - target_sum_hrn) > abs(diff_hrn):
                 break
 
-            current_value = new_value
+            current_value_hrn = new_value_hrn
             current_value_eur = new_value_eur
             current_sum_hrn = updated_sum_hrn
             current_sum_eur = updated_sum_eur
             diff_hrn = target_sum_hrn - current_sum_hrn
             diff_eur = target_sum_eur - current_sum_eur
 
-        values_helper.set_value_by_index(values_helper.index(), current_value)
-        ws[f'{ADJUST_SUM_HRN_COL}{START_DATA_ROW + values_helper.index()}'].value = current_value
+        values_helper.set_value_by_index(values_helper.index(), current_value_hrn)
+        ws[f'{ADJUST_SUM_HRN_COL}{START_DATA_ROW + values_helper.index()}'].value = current_value_hrn
         ws[f'{ADJUST_SUM_EUR_COL}{START_DATA_ROW + values_helper.index()}'].value = current_value_eur
+
+def styling(ws, summary_row, non_empty_rows):
+    ws[ADJUST_SUM_HRN_CELL].fill = PALE_GREEN_FILL
+    ws[ADJUST_SUM_EUR_CELL].fill = PALE_BLUE_FILL
+    ws[f'{ADJUST_SUM_HRN_COL}{summary_row}'].fill = PALE_GREEN_FILL
+    ws[f'{ADJUST_SUM_EUR_COL}{summary_row}'].fill = PALE_BLUE_FILL
 
     for row in range(START_DATA_ROW, START_DATA_ROW + non_empty_rows):
         ws[f'{ADJUST_SUM_HRN_COL}{row}'].fill = YELLOW_FILL
 
-def set_borders(ws, summary_row):
     thick_border_left = Border(left=Side(style="thick"))
     thick_border_right = Border(right=Side(style="thick"))
 
