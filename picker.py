@@ -36,7 +36,7 @@ PALE_GREEN_FILL = PatternFill(start_color="98FB98", end_color="98FB98", fill_typ
 YELLOW_FILL = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
 
 
-def _round(value, number):
+def _round(value):
     return round(round(round(value, 4), 3), 2)
     # return float(Decimal(str(value)).quantize(Decimal('1.' + '1' * number), rounding=ROUND_HALF_UP))
 
@@ -52,7 +52,7 @@ def count_non_empty_models(ws):
 
 def process_excel_file(file_path):
     def equal():
-        return _round(sum_hrn, 2) == _round(target_sum_hrn, 2) and _round(sum_eur, 2) == _round(target_sum_eur, 2)
+        return _round(sum_hrn) == _round(target_sum_hrn) and _round(sum_eur) == _round(target_sum_eur)
 
     # Load the Excel file with data_only=True to get cell values instead of formulas
     wb = load_workbook(file_path, data_only=True)
@@ -70,7 +70,7 @@ def process_excel_file(file_path):
         logging.error(f"Error reading values from the worksheet '{file_path}'. Check that the data is correct.")
         return
 
-    ws[ADJUST_SUM_EUR_CELL].value = _round(target_sum_eur, 2)
+    ws[ADJUST_SUM_EUR_CELL].value = _round(target_sum_eur)
 
     if sum(ws[f'{PERCENT_HRN_COL}{row}'].value for row in range(START_DATA_ROW, START_DATA_ROW + non_empty_rows)) != 100:
         logging.error(f"Total weight percent in column '{PERCENT_HRN_COL}' of file {file_path} does not equal 100%.")
@@ -96,19 +96,19 @@ def process_excel_file(file_path):
     if not equal():
         logging.error(
             f"Could not reach required accuracy for file: {file_path}. "
-            f"Expected sum for HRN: {_round(target_sum_hrn, 2)}, Calculated: {_round(sum_hrn, 2)}. "
-            f"Expected sum for EUR: {_round(target_sum_eur, 2)}, Calculated: {_round(sum_eur, 2)}."
+            f"Expected sum for HRN: {_round(target_sum_hrn)}, Calculated: {_round(sum_hrn)}. "
+            f"Expected sum for EUR: {_round(target_sum_eur)}, Calculated: {_round(sum_eur)}."
         )
 
     summary_row = START_DATA_ROW + non_empty_rows
-    ws[f'{ADJUST_SUM_HRN_COL}{summary_row}'] = _round(sum_hrn, 2)
-    ws[f'{ADJUST_SUM_EUR_COL}{summary_row}'] = _round(sum_eur, 2)
+    ws[f'{ADJUST_SUM_HRN_COL}{summary_row}'] = _round(sum_hrn)
+    ws[f'{ADJUST_SUM_EUR_COL}{summary_row}'] = _round(sum_eur)
 
     for row in range(START_DATA_ROW, START_DATA_ROW + non_empty_rows):
-        ws[f'{PRICE_HRN_COL}{row}'].value = _round(ws[f'{PRICE_HRN_COL}{row}'].value, 2)
-        ws[f'{WEIGHT_PRICE_HRN_COL}{row}'].value = _round(ws[f'{WEIGHT_PRICE_HRN_COL}{row}'].value, 2)
-        ws[f'{ADJUST_SUM_HRN_COL}{row}'].value = _round(ws[f'{ADJUST_SUM_HRN_COL}{row}'].value, 2)
-        ws[f'{ADJUST_SUM_EUR_COL}{row}'].value = _round(ws[f'{ADJUST_SUM_EUR_COL}{row}'].value, 2)
+        ws[f'{PRICE_HRN_COL}{row}'].value = _round(ws[f'{PRICE_HRN_COL}{row}'].value)
+        ws[f'{WEIGHT_PRICE_HRN_COL}{row}'].value = _round(ws[f'{WEIGHT_PRICE_HRN_COL}{row}'].value)
+        ws[f'{ADJUST_SUM_HRN_COL}{row}'].value = _round(ws[f'{ADJUST_SUM_HRN_COL}{row}'].value)
+        ws[f'{ADJUST_SUM_EUR_COL}{row}'].value = _round(ws[f'{ADJUST_SUM_EUR_COL}{row}'].value)
         if DEBUG:
             ws[f'{ADJUST_SUM_HRN_COL}{row}'].value = ws[f'{ADJUST_SUM_HRN_COL}{row}'].value
             ws[f'{ADJUST_SUM_EUR_COL}{row}'].value = ws[f'{ADJUST_SUM_EUR_COL}{row}'].value
@@ -144,7 +144,7 @@ def adjust_hrn_values(ws, non_empty_rows, euro_rate):
 
     def calculate_initial_values(col, cell, rounded=False):
         if rounded:
-            values = [_round(ws[f'{col}{r}'].value, 2) for r in range(START_DATA_ROW, START_DATA_ROW + non_empty_rows)]
+            values = [_round(ws[f'{col}{r}'].value) for r in range(START_DATA_ROW, START_DATA_ROW + non_empty_rows)]
         else:
             values = [ws[f'{col}{r}'].value for r in range(START_DATA_ROW, START_DATA_ROW + non_empty_rows)]
         target_sum = ws[cell].value
@@ -164,12 +164,12 @@ def adjust_hrn_values(ws, non_empty_rows, euro_rate):
 
         while True:
             new_value_hrn = current_value_hrn + increment
-            old_value_eur = _round(current_value_hrn / euro_rate, 2)
-            new_value_eur = _round(new_value_hrn / euro_rate, 2)
+            old_value_eur = _round(current_value_hrn / euro_rate)
+            new_value_eur = _round(new_value_hrn / euro_rate)
             updated_sum_hrn = current_sum_hrn - current_value_hrn + new_value_hrn
             updated_sum_eur = current_sum_eur - old_value_eur + new_value_eur
 
-            if abs(old_value_eur - new_value_eur) == 0 and _round(abs(diff_eur), 2) == 0 and abs(updated_sum_hrn - target_sum_hrn) > abs(diff_hrn):
+            if abs(old_value_eur - new_value_eur) == 0 and _round(abs(diff_eur)) == 0 and abs(updated_sum_hrn - target_sum_hrn) > abs(diff_hrn):
                 break
 
             current_value_hrn = new_value_hrn
