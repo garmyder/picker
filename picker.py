@@ -1,3 +1,4 @@
+import argparse
 import math
 import os
 import logging
@@ -13,7 +14,7 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
-DEBUG = False
+
 ACCURACY = 0.001
 LIMIT = 10000
 MODEL_COL = 'B'
@@ -35,6 +36,10 @@ PALE_BLUE_FILL = PatternFill(start_color="ADD8E6", end_color="ADD8E6", fill_type
 PALE_GREEN_FILL = PatternFill(start_color="98FB98", end_color="98FB98", fill_type="solid")
 YELLOW_FILL = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Picker")
+    parser.add_argument('--manual', action=argparse.BooleanOptionalAction)
+    return parser.parse_args()
 
 def _round(value):
     return round(round(round(value, 4), 3), 2)
@@ -50,7 +55,7 @@ def count_non_empty_models(ws):
     return count
 
 
-def process_excel_file(file_path):
+def process_excel_file(file_path, manual):
     def equal():
         return _round(sum_hrn) == _round(target_sum_hrn) and _round(sum_eur) == _round(target_sum_eur)
 
@@ -70,7 +75,7 @@ def process_excel_file(file_path):
         logging.error(f"Error reading values from the worksheet '{file_path}'. Check that the data is correct.")
         return
 
-    ws[ADJUST_SUM_EUR_CELL].value = _round(target_sum_eur)
+    ws[ADJUST_SUM_EUR_CELL].value = target_sum_eur if manual else _round(target_sum_eur)
 
     if sum(ws[f'{PERCENT_HRN_COL}{row}'].value for row in range(START_DATA_ROW, START_DATA_ROW + non_empty_rows)) != 100:
         logging.error(f"Total weight percent in column '{PERCENT_HRN_COL}' of file {file_path} does not equal 100%.")
@@ -90,7 +95,7 @@ def process_excel_file(file_path):
     sum_hrn = sum(ws[f'{ADJUST_SUM_HRN_COL}{row}'].value for row in range(START_DATA_ROW, START_DATA_ROW + non_empty_rows))
     sum_eur = sum(ws[f'{ADJUST_SUM_EUR_COL}{row}'].value for row in range(START_DATA_ROW, START_DATA_ROW + non_empty_rows))
 
-    if not equal():
+    if not equal() and not manual:
         adjust_hrn_values(ws, non_empty_rows, euro_rate)
 
     if not equal():
@@ -101,17 +106,21 @@ def process_excel_file(file_path):
         )
 
     summary_row = START_DATA_ROW + non_empty_rows
-    ws[f'{ADJUST_SUM_HRN_COL}{summary_row}'] = _round(sum_hrn)
-    ws[f'{ADJUST_SUM_EUR_COL}{summary_row}'] = _round(sum_eur)
+    ws[f'{ADJUST_SUM_HRN_COL}{summary_row}'] = sum_hrn if manual else _round(sum_hrn)
+    ws[f'{ADJUST_SUM_EUR_COL}{summary_row}'] = sum_eur if manual else _round(sum_eur)
 
-    for row in range(START_DATA_ROW, START_DATA_ROW + non_empty_rows):
-        ws[f'{PRICE_HRN_COL}{row}'].value = _round(ws[f'{PRICE_HRN_COL}{row}'].value)
-        ws[f'{WEIGHT_PRICE_HRN_COL}{row}'].value = _round(ws[f'{WEIGHT_PRICE_HRN_COL}{row}'].value)
-        ws[f'{ADJUST_SUM_HRN_COL}{row}'].value = _round(ws[f'{ADJUST_SUM_HRN_COL}{row}'].value)
-        ws[f'{ADJUST_SUM_EUR_COL}{row}'].value = _round(ws[f'{ADJUST_SUM_EUR_COL}{row}'].value)
-        if DEBUG:
+    if manual:
+        for row in range(START_DATA_ROW, START_DATA_ROW + non_empty_rows):
+            ws[f'{PRICE_HRN_COL}{row}'].value = ws[f'{PRICE_HRN_COL}{row}'].value
+            ws[f'{WEIGHT_PRICE_HRN_COL}{row}'].value = ws[f'{WEIGHT_PRICE_HRN_COL}{row}'].value
             ws[f'{ADJUST_SUM_HRN_COL}{row}'].value = ws[f'{ADJUST_SUM_HRN_COL}{row}'].value
             ws[f'{ADJUST_SUM_EUR_COL}{row}'].value = ws[f'{ADJUST_SUM_EUR_COL}{row}'].value
+    else:
+        for row in range(START_DATA_ROW, START_DATA_ROW + non_empty_rows):
+            ws[f'{PRICE_HRN_COL}{row}'].value = _round(ws[f'{PRICE_HRN_COL}{row}'].value)
+            ws[f'{WEIGHT_PRICE_HRN_COL}{row}'].value = _round(ws[f'{WEIGHT_PRICE_HRN_COL}{row}'].value)
+            ws[f'{ADJUST_SUM_HRN_COL}{row}'].value = _round(ws[f'{ADJUST_SUM_HRN_COL}{row}'].value)
+            ws[f'{ADJUST_SUM_EUR_COL}{row}'].value = _round(ws[f'{ADJUST_SUM_EUR_COL}{row}'].value)
 
     styling(ws, summary_row, non_empty_rows)
 
@@ -248,6 +257,7 @@ class ValuesHelper:
         return item.value
 
 def main():
+    args = parse_args()
     folder_path = os.getcwd()
     excel_files = [f for f in os.listdir(folder_path) if f.endswith('.xlsx')]
 
@@ -257,7 +267,7 @@ def main():
 
     for file_name in excel_files:
         file_path = os.path.join(folder_path, file_name)
-        process_excel_file(file_path)
+        process_excel_file(file_path, args.manual)
 
 
 if __name__ == "__main__":
