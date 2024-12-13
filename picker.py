@@ -168,7 +168,7 @@ def adjustment(ws, non_empty_rows, euro_rate):
 
     values_helper = ValuesHelper(fill_values_holder_list(values_hrn, diff_hrn > 0))
 
-    if abs(diff_hrn) > 0 or abs(diff_eur) > 0:
+    if abs(diff_eur) > 0:
         if diff_eur > 0:
             increment = ACCURACY
             current_value_hrn = values_helper.get_item_by_fraction_index(0).value
