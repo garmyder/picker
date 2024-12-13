@@ -44,17 +44,17 @@ def _round(value, number=2):
     value = round(round(value, 4), 3)
     return float(Decimal(str(value)).quantize(Decimal('1.' + '1' * number), rounding=ROUND_HALF_UP))
 
-def count_non_empty_models(ws):
-    count = 0
-    for row in range(START_DATA_ROW, ws.max_row + 1):
-        if ws[f'{MODEL_COL}{row}'].value is not None:  # Check if the cell is not empty
-            count += 1
-        else:
-            break  # Stop counting at the first empty cell
-    return count
-
 
 def process_excel_file(file_path, manual):
+    def count_non_empty_models():
+        count = 0
+        for row in range(START_DATA_ROW, ws.max_row + 1):
+            if ws[f'{MODEL_COL}{row}'].value is not None:  # Check if the cell is not empty
+                count += 1
+            else:
+                break  # Stop counting at the first empty cell
+        return count
+
     def is_sums_equal():
         return _round(sum_hrn) == _round(target_sum_hrn) and _round(sum_eur) == _round(target_sum_eur)
 
@@ -71,7 +71,7 @@ def process_excel_file(file_path, manual):
         # date = ws[date_cell].value
         euro_rate = ws[EURO_RATE_CELL].value
         target_sum_hrn = ws[ADJUST_SUM_HRN_CELL].value
-        non_empty_rows = count_non_empty_models(ws)
+        non_empty_rows = count_non_empty_models()
         target_sum_eur = target_sum_hrn / euro_rate
         sum_price_models_euro = sum(ws[f'{PRICE_EUR_COL}{row}'].value for row in range(START_DATA_ROW, START_DATA_ROW + non_empty_rows))
         recalculated_diff_euro = target_sum_eur - sum_price_models_euro
