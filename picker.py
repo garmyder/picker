@@ -171,10 +171,10 @@ def adjustment(ws, non_empty_rows, euro_rate):
     if abs(diff_eur) > 0:
         if diff_eur > 0:
             increment = ACCURACY
-            current_value_hrn = values_helper.get_item_by_fraction_index(0).value
+            current_value_hrn = values_helper.min()
         else:
             increment = -ACCURACY
-            current_value_hrn = values_helper.get_item_by_fraction_index(len(values_helper.values) - 1).value
+            current_value_hrn = values_helper.max()
 
         current_value_eur = _round(ws[f'{ADJUST_SUM_EUR_COL}{START_DATA_ROW + values_helper.index()}'].value)
 
@@ -193,7 +193,7 @@ def adjustment(ws, non_empty_rows, euro_rate):
     values_hrn, target_sum_hrn, current_sum_hrn, diff_hrn = calculate_values(ADJUST_SUM_HRN_COL, ADJUST_SUM_HRN_CELL)
     if abs(diff_hrn) > 0:
         if diff_hrn > 0:
-            current_value_hrn = _round(values_helper.get_item_by_fraction_index(len(values_helper.values) - 1).value)
+            current_value_hrn = _round(values_helper.max())
         else:
             current_value_hrn = _round(values_helper.next())
         ws[f'{ADJUST_SUM_HRN_COL}{START_DATA_ROW + values_helper.index()}'].value = current_value_hrn + diff_hrn
@@ -262,6 +262,12 @@ class ValuesHelper:
             self.current_fraction += 1
         item = self.get_item_by_fraction_index(self.current_fraction)
         return item.value
+
+    def min(self):
+        return self.get_item_by_fraction_index(0).value
+
+    def max(self):
+        return self.get_item_by_fraction_index(len(self.values) - 1).value
 
 def main():
     args = parse_args()
