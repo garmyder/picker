@@ -186,16 +186,12 @@ def adjustment(ws, non_empty_rows, euro_rate):
             current_sum_eur = updated_sum_eur
             diff_eur = _round(target_sum_eur - current_sum_eur)
 
-        values_helper.set_value_by_index(values_helper.index(), current_value_hrn)
         ws[f'{ADJUST_SUM_HRN_COL}{START_DATA_ROW + values_helper.index()}'].value = current_value_hrn
         ws[f'{ADJUST_SUM_EUR_COL}{START_DATA_ROW + values_helper.index()}'].value = current_value_eur
 
     values_hrn, target_sum_hrn, current_sum_hrn, diff_hrn = calculate_values(ADJUST_SUM_HRN_COL, ADJUST_SUM_HRN_CELL)
     if abs(diff_hrn) > 0:
-        if diff_hrn > 0:
-            current_value_hrn = _round(values_helper.max())
-        else:
-            current_value_hrn = _round(values_helper.next())
+        current_value_hrn = _round(values_helper.next())
         ws[f'{ADJUST_SUM_HRN_COL}{START_DATA_ROW + values_helper.index()}'].value = current_value_hrn + diff_hrn
 
 def styling(ws, summary_row, non_empty_rows):
