@@ -41,8 +41,7 @@ def parse_args():
     return parser.parse_args()
 
 def _round(value, number=2):
-    value = round(round(value, 4), 3)
-    return float(Decimal(str(value)).quantize(Decimal('1.' + '1' * number), rounding=ROUND_HALF_UP))
+    return float(Decimal(str(round(value, 4))).quantize(Decimal('1.' + '1' * number), rounding=ROUND_HALF_UP))
 
 
 def process_excel_file(file_path, manual):
