@@ -4,7 +4,7 @@ import os
 import logging
 from decimal import Decimal, ROUND_HALF_UP
 from openpyxl import load_workbook
-from openpyxl.styles import PatternFill, Border, Side
+from openpyxl.styles import PatternFill, Border, Side, Color, Font
 
 logging.basicConfig(
     level=logging.INFO,
@@ -34,6 +34,8 @@ ADJUST_SUM_HRN_CELL = f"{ADJUST_SUM_HRN_COL}{START_COLUMN + 1}"
 PALE_BLUE_FILL = PatternFill(start_color="ADD8E6", end_color="ADD8E6", fill_type="solid")
 PALE_GREEN_FILL = PatternFill(start_color="98FB98", end_color="98FB98", fill_type="solid")
 YELLOW_FILL = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+RED_FONT = Color('FF0000')
+ORANGE_FONT = Color('EE9A00')
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Picker")
@@ -41,8 +43,11 @@ def parse_args():
     return parser.parse_args()
 
 def _round(value, number=2):
-    return float(Decimal(str(round(value, 4))).quantize(Decimal('1.' + '1' * number), rounding=ROUND_HALF_UP))
-
+    # value = round(round(round(value, 4), 3), 2)
+    # value = round(value, 2)
+    for i in range(4, number-1, -1):
+        value = float(Decimal(str(value)).quantize(Decimal('1.' + '1' * i), rounding=ROUND_HALF_UP))
+    return value
 
 def process_excel_file(file_path, manual):
     def count_non_empty_models():
@@ -74,11 +79,11 @@ def process_excel_file(file_path, manual):
         target_sum_eur = target_sum_hrn / euro_rate
         sum_price_models_euro = sum(ws[f'{PRICE_EUR_COL}{row}'].value for row in range(START_DATA_ROW, START_DATA_ROW + non_empty_rows))
         recalculated_diff_euro = target_sum_eur - sum_price_models_euro
+        # write calculated Target EUR value into the sheet
+        ws[ADJUST_SUM_EUR_CELL].value = target_sum_eur if manual else _round(target_sum_eur)
     except TypeError:
         logging.error(f"Error reading values from the worksheet '{file_path}'. Check that the data is correct.")
         return
-
-    ws[ADJUST_SUM_EUR_CELL].value = target_sum_eur if manual else _round(target_sum_eur)
 
     if sum(ws[f'{PERCENT_HRN_COL}{row}'].value for row in range(START_DATA_ROW, START_DATA_ROW + non_empty_rows)) != 100:
         logging.error(f"Total weight percent in column '{PERCENT_HRN_COL}' of file {file_path} does not equal 100%.")
@@ -169,6 +174,15 @@ def adjustment(ws, non_empty_rows, euro_rate):
         diff = _round(target_sum - current_sum)
         return values, target_sum, current_sum, diff
 
+    def mark_cell(col: str, row: int, color: Color):
+        ws[f'{col}{row}'].font = Font(color=color)
+
+    def write_cell(col: str, row: str, value):
+        ws[f'{col}{row}'].value = value
+
+    def read_cell(col: str, row: str):
+        return ws[f'{col}{row}'].value
+
     values_hrn, target_sum_hrn, current_sum_hrn, diff_hrn = calculate_values(ADJUST_SUM_HRN_COL, ADJUST_SUM_HRN_CELL)
     values_eur, target_sum_eur, current_sum_eur, diff_eur = calculate_values(ADJUST_SUM_EUR_COL, ADJUST_SUM_EUR_CELL)
 
@@ -178,7 +192,10 @@ def adjustment(ws, non_empty_rows, euro_rate):
     while diff_eur != 0 or diff_hrn != 0:
         if diff_eur != 0:
             current_value_hrn = values_helper.next_min() if diff_eur > 0 else values_helper.next_max()
-            current_value_eur = _round(ws[f'{ADJUST_SUM_EUR_COL}{START_DATA_ROW + values_helper.index()}'].value)
+            current_value_eur = _round(read_cell(ADJUST_SUM_EUR_COL, START_DATA_ROW + values_helper.index()))
+            current_row = START_DATA_ROW + values_helper.index()
+            new_value_eur = current_value_eur
+            old_value_eur = current_value_eur
 
             while diff_eur != 0:
                 current_value_hrn += increment
@@ -187,15 +204,28 @@ def adjustment(ws, non_empty_rows, euro_rate):
                 current_value_eur = new_value_eur
                 diff_eur = _round(target_sum_eur - current_sum_eur)
 
-            ws[f'{ADJUST_SUM_HRN_COL}{START_DATA_ROW + values_helper.index()}'].value = current_value_hrn
-            ws[f'{ADJUST_SUM_EUR_COL}{START_DATA_ROW + values_helper.index()}'].value = current_value_eur
+            write_cell(ADJUST_SUM_HRN_COL, current_row, current_value_hrn)
+            write_cell(ADJUST_SUM_EUR_COL, current_row, current_value_eur)
+            mark_cell(ADJUST_SUM_HRN_COL, current_row, RED_FONT)
+            if new_value_eur != old_value_eur:
+                mark_cell(ADJUST_SUM_EUR_COL, current_row, RED_FONT)
 
         values_hrn, target_sum_hrn, current_sum_hrn, diff_hrn = calculate_values(ADJUST_SUM_HRN_COL, ADJUST_SUM_HRN_CELL)
         if diff_hrn != 0:
             current_value_hrn = values_helper.next_max() if diff_hrn > 0 else values_helper.next_min()
-            ws[f'{ADJUST_SUM_HRN_COL}{START_DATA_ROW + values_helper.index()}'].value = current_value_hrn + diff_hrn
+            current_row = START_DATA_ROW + values_helper.index()
+            write_cell(ADJUST_SUM_HRN_COL, current_row, current_value_hrn + diff_hrn)
+            current_value_eur = _round(read_cell(ADJUST_SUM_EUR_COL, current_row))
+            new_value_eur = _round(current_value_hrn / euro_rate)
+            old_value_eur = current_value_eur
+            if current_value_eur != new_value_eur:
+                logging.warning(f"Value EUR is changed due to value HRN adjustment. Was: {current_value_eur}, now: {new_value_eur}")
+            mark_cell(ADJUST_SUM_HRN_COL, current_row, ORANGE_FONT)
+            if current_value_eur != old_value_eur:
+                mark_cell(ADJUST_SUM_EUR_COL, current_row, ORANGE_FONT)
 
         values_hrn, target_sum_hrn, current_sum_hrn, diff_hrn = calculate_values(ADJUST_SUM_HRN_COL, ADJUST_SUM_HRN_CELL)
+        values_eur, target_sum_eur, current_sum_eur, diff_eur = calculate_values(ADJUST_SUM_EUR_COL, ADJUST_SUM_EUR_CELL)
 
 def styling(ws, summary_row, non_empty_rows):
     ws[ADJUST_SUM_HRN_CELL].fill = PALE_GREEN_FILL
