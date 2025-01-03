@@ -57,7 +57,7 @@ def mark_cell(sheet, col: str, row: int, color: Color):
     sheet[f'{col}{row}'].font = Font(color=color)
 
 
-def write_cell(sheet, col: str, row: str, value):
+def write_cell(sheet, col: str, row: int, value):
     sheet[f'{col}{row}'].value = value
 
 
@@ -111,11 +111,11 @@ def process_excel_file(file_path, manual):
         weight_percent = ws[f'{PERCENT_HRN_COL}{row}'].value
         sum_by_percent = recalculated_diff_euro * euro_rate * weight_percent / 100
 
-        ws[f'{PRICE_HRN_COL}{row}'] = price_model_hrn
-        ws[f'{WEIGHT_PRICE_HRN_COL}{row}'] = abs(sum_by_percent)
-        ws[f'{ADJUST_SUM_HRN_COL}{row}'] = ws[f'{PRICE_HRN_COL}{row}'].value + sum_by_percent
-        ws[f'{ADJUST_SUM_EUR_COL}{row}'] = ws[f'{ADJUST_SUM_HRN_COL}{row}'].value / euro_rate
-        ws[f'{ADJUST_SUM_HRN_COL}{row + non_empty_rows + 2}'] = ws[f'{PRICE_HRN_COL}{row}'].value + sum_by_percent
+        write_cell(ws, PRICE_HRN_COL, row, price_model_hrn)
+        write_cell(ws, WEIGHT_PRICE_HRN_COL, row, abs(sum_by_percent))
+        write_cell(ws, ADJUST_SUM_HRN_COL, row, ws[f'{PRICE_HRN_COL}{row}'].value + sum_by_percent)
+        write_cell(ws, ADJUST_SUM_EUR_COL, row, ws[f'{ADJUST_SUM_HRN_COL}{row}'].value / euro_rate)
+        write_cell(ws, ADJUST_SUM_HRN_COL, row + non_empty_rows + 2, ws[f'{PRICE_HRN_COL}{row}'].value + sum_by_percent)
 
     if not manual:
         adjustment(ws, non_empty_rows, euro_rate)
@@ -136,21 +136,21 @@ def process_excel_file(file_path, manual):
     # rounding HRN & EUR columns
     for row in range(START_DATA_ROW, START_DATA_ROW + non_empty_rows):
         if not manual:
-            ws[f'{PRICE_HRN_COL}{row}'].value = _round(ws[f'{PRICE_HRN_COL}{row}'].value)
-            ws[f'{WEIGHT_PRICE_HRN_COL}{row}'].value = _round(ws[f'{WEIGHT_PRICE_HRN_COL}{row}'].value)
-            ws[f'{ADJUST_SUM_HRN_COL}{row}'].value = _round(ws[f'{ADJUST_SUM_HRN_COL}{row}'].value)
-            ws[f'{ADJUST_SUM_EUR_COL}{row}'].value = _round(ws[f'{ADJUST_SUM_EUR_COL}{row}'].value)
-        ws[f'{ADJUST_SUM_EUR_COL}{row + non_empty_rows + 2}'].value = ws[f'{ADJUST_SUM_HRN_COL}{row}'].value
-        ws[f'{CHECK_EUR_COL}{row + non_empty_rows + 2}'] = f'={ADJUST_SUM_EUR_COL}{row + non_empty_rows + 2}/{EURO_RATE_CELL}'
+            write_cell(ws, PRICE_HRN_COL, row, _round(ws[f'{PRICE_HRN_COL}{row}'].value))
+            write_cell(ws, WEIGHT_PRICE_HRN_COL, row, _round(ws[f'{WEIGHT_PRICE_HRN_COL}{row}'].value))
+            write_cell(ws, ADJUST_SUM_HRN_COL, row, _round(ws[f'{ADJUST_SUM_HRN_COL}{row}'].value))
+            write_cell(ws, ADJUST_SUM_EUR_COL, row, _round(ws[f'{ADJUST_SUM_EUR_COL}{row}'].value))
+        write_cell(ws, ADJUST_SUM_EUR_COL, row + non_empty_rows + 2, ws[f'{ADJUST_SUM_HRN_COL}{row}'].value)
+        write_cell(ws, CHECK_EUR_COL, row + non_empty_rows + 2, f'={ADJUST_SUM_EUR_COL}{row + non_empty_rows + 2}/{EURO_RATE_CELL}')
         ws[f'{CHECK_EUR_COL}{row + non_empty_rows + 2}'].number_format = '0.00000'
         mark_cell(ws, CHECK_EUR_COL, row + non_empty_rows + 2, BLUE_FONT)
 
     row_sum = START_DATA_ROW + non_empty_rows * 2 + 3
     row_start = START_DATA_ROW + non_empty_rows + 2
     row_end = START_DATA_ROW + non_empty_rows + non_empty_rows + 1
-    ws[f'{ADJUST_SUM_HRN_COL}{row_sum}'].value = f'=SUM({ADJUST_SUM_HRN_COL}{row_start}:{ADJUST_SUM_HRN_COL}{row_end})'
-    ws[f'{ADJUST_SUM_EUR_COL}{row_sum}'].value = f'=SUM({ADJUST_SUM_EUR_COL}{row_start}:{ADJUST_SUM_EUR_COL}{row_end})'
-    ws[f'{CHECK_EUR_COL}{row_sum}'].value = f'=SUM({CHECK_EUR_COL}{row_start}:{CHECK_EUR_COL}{row_end})'
+    write_cell(ws, ADJUST_SUM_HRN_COL, row_sum, f'=SUM({ADJUST_SUM_HRN_COL}{row_start}:{ADJUST_SUM_HRN_COL}{row_end})')
+    write_cell(ws, ADJUST_SUM_EUR_COL, row_sum, f'=SUM({ADJUST_SUM_EUR_COL}{row_start}:{ADJUST_SUM_EUR_COL}{row_end})')
+    write_cell(ws, CHECK_EUR_COL, row_sum, f'=SUM({CHECK_EUR_COL}{row_start}:{CHECK_EUR_COL}{row_end})')
     mark_cell(ws, ADJUST_SUM_HRN_COL, row_sum, BLUE_FONT)
     mark_cell(ws, ADJUST_SUM_EUR_COL, row_sum, BLUE_FONT)
     mark_cell(ws, CHECK_EUR_COL, row_sum, BLUE_FONT)
@@ -223,9 +223,12 @@ def adjustment(ws, non_empty_rows, euro_rate):
             current_value_eur = _round(read_cell(ws, ADJUST_SUM_EUR_COL, current_row))
             new_value_eur = _round(current_value_hrn / euro_rate)
             old_value_eur = current_value_eur
+
             if current_value_eur != new_value_eur:
                 logging.warning(f"Value EUR is changed due to value HRN adjustment. Was: {current_value_eur}, now: {new_value_eur}")
+
             mark_cell(ws, ADJUST_SUM_HRN_COL, current_row, ORANGE_FONT)
+
             if current_value_eur != old_value_eur:
                 mark_cell(ws, ADJUST_SUM_EUR_COL, current_row, ORANGE_FONT)
 
